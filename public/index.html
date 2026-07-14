@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Login WhatsApp Multi-User</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; padding: 50px">
+        <h2>Login WhatsApp</h2>
+        <p>Masukkan nomor WA (awali dengan 62, contoh: 62812...)</p>
+
+        <input type="text" id="phoneInput" placeholder="628123456789" />
+        <button onclick="startLogin()">Dapatkan Kode Login</button>
+
+        <div style="margin-top: 20px">
+            <h1
+                id="pairingCodeDisplay"
+                style="color: blue; letter-spacing: 5px"
+            ></h1>
+            <p id="statusDisplay"></p>
+            <img id="qrDisplay" src="" alt="" style="display: none" />
+        </div>
+
+        <script src="/socket.io/socket.io.js"></script>
+        <script>
+            const socket = io();
+
+            // Menerima Pairing Code dari server
+            socket.on("pairing-code", (data) => {
+                document.getElementById("statusDisplay").innerText =
+                    `Masukkan kode ini di notifikasi WA HP-mu:`;
+                document.getElementById("pairingCodeDisplay").innerText =
+                    data.code;
+            });
+
+            // Menerima status koneksi
+            socket.on("status", (data) => {
+                document.getElementById("statusDisplay").innerText =
+                    `Status: ${data.status}`;
+                document.getElementById("statusDisplay").style.color = "green";
+            });
+
+            // Menerima QR Code (Jika mau pakai QR)
+            socket.on("qr-code", (data) => {
+                document.getElementById("statusDisplay").innerText =
+                    `Atau scan QR Code ini:`;
+                document.getElementById("qrDisplay").src = data.qrImage;
+                document.getElementById("qrDisplay").style.display = "block";
+            });
+
+            function startLogin() {
+                const phoneNumber = document.getElementById("phoneInput").value;
+                if (!phoneNumber) return alert("Isi nomor dulu!");
+
+                document.getElementById("statusDisplay").innerText =
+                    "Meminta kode ke server...";
+
+                fetch("/api/start-session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ phoneNumber }),
+                });
+            }
+        </script>
+    </body>
+</html>
