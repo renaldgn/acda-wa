@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Login - Panel WhatsApp</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    
+    <body class="bg-gray-100 font-sans antialiased min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+            <h2 class="text-2xl font-bold text-center mb-6">Login Panel</h2>
+
+            <div
+                id="errorMsg"
+                class="bg-red-100 text-red-600 p-2 rounded mb-4 text-sm hidden"
+            ></div>
+
+            <form id="loginForm">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2"
+                        >Username</label
+                    >
+                    <input
+                        type="text"
+                        id="username"
+                        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
+                    />
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2"
+                        >Password</label
+                    >
+                    <input
+                        type="password"
+                        id="password"
+                        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        required
+                    />
+                </div>
+                <button
+                    type="submit"
+                    class="w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition-colors"
+                >
+                    Login
+                </button>
+            </form>
+            
+            <div class="mt-6 text-center text-sm text-gray-600">
+                Belum punya akun?
+                <a
+                    href="/register.html"
+                    class="text-green-500 hover:text-green-600 font-semibold hover:underline"
+                    >Daftar di sini</a
+                >
+            </div>
+        </div>
+
+        <script>
+            document
+                .getElementById("loginForm")
+                .addEventListener("submit", async (e) => {
+                    e.preventDefault(); // Mencegah form reload halaman
+                    const username = document.getElementById("username").value;
+                    const password = document.getElementById("password").value;
+                    const errorMsg = document.getElementById("errorMsg");
+
+                    try {
+                        const response = await fetch("/api/auth/login", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ username, password }),
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            // Jika login sukses, arahkan kembali ke halaman Connect Device (misal: index.html)
+                            window.location.href = "/";
+                        } else {
+                            // Tampilkan pesan error dari server
+                            errorMsg.innerText = data.error || "Login gagal";
+                            errorMsg.classList.remove("hidden");
+                        }
+                    } catch (err) {
+                        errorMsg.innerText = "Terjadi kesalahan jaringan";
+                        errorMsg.classList.remove("hidden");
+                    }
+                });
+        </script>
+    </body>
+</html>

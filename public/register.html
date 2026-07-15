@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Register - Panel WhatsApp</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+            rel="stylesheet"
+        />
+    </head>
+    <body
+        class="bg-gray-50 font-sans antialiased min-h-screen flex items-center justify-center p-4"
+    >
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+            <div class="text-center mb-8">
+                <i class="fas fa-user-plus text-4xl text-green-500 mb-3"></i>
+                <h2 class="text-2xl font-bold text-gray-800">Buat Akun Baru</h2>
+                <p class="text-sm text-gray-500 mt-1">
+                    Daftar untuk mengakses Panel WhatsApp
+                </p>
+            </div>
+
+            <div
+                id="messageBox"
+                class="p-3 rounded-lg mb-5 text-sm hidden text-center font-medium"
+            ></div>
+
+            <form id="registerForm">
+                <div class="mb-4">
+                    <label
+                        class="block text-gray-700 text-sm font-semibold mb-2"
+                        for="username"
+                        >Username</label
+                    >
+                    <div class="relative">
+                        <span
+                            class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"
+                        >
+                            <i class="fas fa-user"></i>
+                        </span>
+                        <input
+                            type="text"
+                            id="username"
+                            class="pl-10 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+                            placeholder="Masukkan username"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label
+                        class="block text-gray-700 text-sm font-semibold mb-2"
+                        for="password"
+                        >Password</label
+                    >
+                    <div class="relative">
+                        <span
+                            class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"
+                        >
+                            <i class="fas fa-lock"></i>
+                        </span>
+                        <input
+                            type="password"
+                            id="password"
+                            class="pl-10 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+                            placeholder="Buat password"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label
+                        class="block text-gray-700 text-sm font-semibold mb-2"
+                        for="confirmPassword"
+                        >Konfirmasi Password</label
+                    >
+                    <div class="relative">
+                        <span
+                            class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"
+                        >
+                            <i class="fas fa-check-circle"></i>
+                        </span>
+                        <input
+                            type="password"
+                            id="confirmPassword"
+                            class="pl-10 w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+                            placeholder="Ulangi password"
+                            required
+                        />
+                    </div>
+                </div>
+
+                <button
+                    type="submit"
+                    id="submitBtn"
+                    class="w-full bg-green-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-600 transition-colors shadow-md flex justify-center items-center gap-2"
+                >
+                    <span id="btnText">Daftar Sekarang</span>
+                    <i
+                        id="btnSpinner"
+                        class="fas fa-spinner fa-spin hidden"
+                    ></i>
+                </button>
+            </form>
+
+            <div class="mt-6 text-center text-sm text-gray-600">
+                Sudah punya akun?
+                <a
+                    href="/login.html"
+                    class="text-green-500 hover:text-green-600 font-semibold hover:underline"
+                    >Login di sini</a
+                >
+            </div>
+        </div>
+
+        <script>
+            document
+                .getElementById("registerForm")
+                .addEventListener("submit", async (e) => {
+                    e.preventDefault(); // Mencegah form reload halaman
+
+                    const username = document
+                        .getElementById("username")
+                        .value.trim();
+                    const password = document.getElementById("password").value;
+                    const confirmPassword =
+                        document.getElementById("confirmPassword").value;
+
+                    const messageBox = document.getElementById("messageBox");
+                    const submitBtn = document.getElementById("submitBtn");
+                    const btnText = document.getElementById("btnText");
+                    const btnSpinner = document.getElementById("btnSpinner");
+
+                    // Reset pesan
+                    messageBox.classList.add("hidden");
+                    messageBox.className =
+                        "p-3 rounded-lg mb-5 text-sm hidden text-center font-medium"; // reset class
+
+                    // Validasi Password Cocok
+                    if (password !== confirmPassword) {
+                        messageBox.innerText =
+                            "Password dan Konfirmasi Password tidak cocok!";
+                        messageBox.classList.add("bg-red-100", "text-red-600");
+                        messageBox.classList.remove("hidden");
+                        return;
+                    }
+
+                    // Ubah tombol jadi loading
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add("opacity-70", "cursor-not-allowed");
+                    btnText.innerText = "Memproses...";
+                    btnSpinner.classList.remove("hidden");
+
+                    try {
+                        // Tembak API Register yang sudah kita buat di routes/auth.js
+                        const response = await fetch("/api/auth/register", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ username, password }),
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            // Tampilkan pesan sukses
+                            messageBox.innerText =
+                                "✅ Registrasi berhasil! Mengalihkan ke halaman login...";
+                            messageBox.classList.add(
+                                "bg-green-100",
+                                "text-green-700",
+                            );
+                            messageBox.classList.remove("hidden");
+
+                            // Kosongkan form
+                            document.getElementById("registerForm").reset();
+
+                            // Redirect ke login setelah 2 detik
+                            setTimeout(() => {
+                                window.location.href = "/login.html";
+                            }, 2000);
+                        } else {
+                            // Tampilkan pesan error dari server (misal: Username sudah dipakai)
+                            messageBox.innerText =
+                                data.error || "Gagal mendaftar";
+                            messageBox.classList.add(
+                                "bg-red-100",
+                                "text-red-600",
+                            );
+                            messageBox.classList.remove("hidden");
+                        }
+                    } catch (err) {
+                        messageBox.innerText =
+                            "Terjadi kesalahan jaringan atau server mati.";
+                        messageBox.classList.add("bg-red-100", "text-red-600");
+                        messageBox.classList.remove("hidden");
+                    } finally {
+                        // Kembalikan tombol seperti semula jika tidak sukses/sedang error
+                        if (!messageBox.classList.contains("bg-green-100")) {
+                            submitBtn.disabled = false;
+                            submitBtn.classList.remove(
+                                "opacity-70",
+                                "cursor-not-allowed",
+                            );
+                            btnText.innerText = "Daftar Sekarang";
+                            btnSpinner.classList.add("hidden");
+                        }
+                    }
+                });
+        </script>
+    </body>
+</html>

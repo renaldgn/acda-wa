@@ -1,0 +1,8 @@
+{
+    "endpoint": "/api/send-message",
+    "body": {
+        "senderNumber": "628xxx",
+        "targetNumber": "628xxx",
+        "message": "testing dlu"
+    }
+}

@@ -3,63 +3,399 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Login WhatsApp Multi-User</title>
+        <title>WhatsApp Multi-User Connect</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+            rel="stylesheet"
+        />
+        <style>
+            /* Custom animation untuk fade in */
+            .fade-in {
+                animation: fadeIn 0.5s ease-in-out;
+            }
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+        </style>
     </head>
-    <body style="font-family: Arial, sans-serif; padding: 50px">
-        <h2>Login WhatsApp</h2>
-        <p>Masukkan nomor WA (awali dengan 62, contoh: 62812...)</p>
+    <body
+        id="mainBody"
+        style="display: none"
+        class="bg-gray-50 text-gray-800 font-sans antialiased min-h-screen flex items-center justify-center p-4"
+    >
+        <button
+            onclick="logoutPanel()"
+            class="absolute top-4 right-4 text-sm text-red-500 hover:underline font-semibold"
+        >
+            <i class="fas fa-sign-out-alt mr-1"></i> Keluar Panel
+        </button>
 
-        <input type="text" id="phoneInput" placeholder="628123456789" />
-        <button onclick="startLogin()">Dapatkan Kode Login</button>
+        <div class="w-full max-w-md flex flex-col gap-6">
+            <div
+                class="bg-white rounded-2xl shadow-xl w-full overflow-hidden fade-in"
+            >
+                <div class="bg-green-500 p-6 text-center text-white">
+                    <i class="fab fa-whatsapp text-5xl mb-3"></i>
+                    <h2 class="text-2xl font-bold">Hubungkan Perangkat</h2>
+                    <p class="text-green-100 text-sm mt-1">
+                        Gunakan nomor WA untuk mendapatkan Pairing Code
+                    </p>
+                </div>
 
-        <div style="margin-top: 20px">
-            <h1
-                id="pairingCodeDisplay"
-                style="color: blue; letter-spacing: 5px"
-            ></h1>
-            <p id="statusDisplay"></p>
-            <img id="qrDisplay" src="" alt="" style="display: none" />
+                <div class="p-8">
+                    <div class="mb-5">
+                        <label
+                            for="phoneInput"
+                            class="block text-sm font-medium text-gray-700 mb-2"
+                            >Nomor WhatsApp</label
+                        >
+                        <div class="relative">
+                            <span
+                                class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 font-medium"
+                                >+</span
+                            >
+                            <input
+                                type="text"
+                                id="phoneInput"
+                                placeholder="628123456789"
+                                class="pl-7 block w-full rounded-lg border-gray-300 border px-4 py-3 text-gray-900 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors shadow-sm outline-none"
+                                oninput="
+                                    this.value = this.value.replace(
+                                        /[^0-9]/g,
+                                        '',
+                                    )
+                                "
+                            />
+                        </div>
+                        <p
+                            id="phoneError"
+                            class="text-red-500 text-xs mt-1 hidden"
+                        >
+                            Nomor WhatsApp tidak boleh kosong.
+                        </p>
+                    </div>
+
+                    <button
+                        id="loginBtn"
+                        onclick="startLogin()"
+                        class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg transition-colors flex justify-center items-center gap-2 shadow-md"
+                    >
+                        <span id="btnText">Dapatkan Kode</span>
+                        <i
+                            id="btnSpinner"
+                            class="fas fa-spinner fa-spin hidden"
+                        ></i>
+                    </button>
+
+                    <div id="resultArea" class="mt-8 text-center hidden">
+                        <div class="border-t border-gray-200 pt-6">
+                            <p
+                                id="statusDisplay"
+                                class="text-sm font-medium text-gray-600 mb-3"
+                            ></p>
+
+                            <div id="pairingCodeContainer" class="hidden">
+                                <div
+                                    class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-2 flex items-center justify-between"
+                                >
+                                    <h1
+                                        id="pairingCodeDisplay"
+                                        class="text-3xl font-mono font-bold text-blue-700 tracking-[0.2em] w-full text-center"
+                                    ></h1>
+                                </div>
+                                <p class="text-xs text-gray-500">
+                                    Buka WhatsApp > Perangkat Tertaut > Tautkan
+                                    dengan Nomor Telepon
+                                </p>
+                            </div>
+
+                            <img
+                                id="qrDisplay"
+                                src=""
+                                alt="QR Code"
+                                class="mx-auto mt-4 rounded-lg shadow-sm hidden max-w-[200px]"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        id="deviceListContainer"
+                        class="bg-white rounded-2xl shadow-xl w-full overflow-hidden hidden fade-in mt-4"
+                    >
+                        <div class="bg-gray-100 p-4 border-b border-gray-200">
+                            <h3 class="text-lg font-bold text-gray-700">
+                                <i
+                                    class="fas fa-mobile-alt mr-2 text-gray-500"
+                                ></i
+                                >Perangkat Tersambung
+                            </h3>
+                        </div>
+                        <div
+                            id="deviceList"
+                            class="p-4 flex flex-col gap-3 max-h-64 overflow-y-auto"
+                        ></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <script src="/socket.io/socket.io.js"></script>
         <script>
+            // --- FUNGSI PANEL & DEVICE ---
+            document.addEventListener("DOMContentLoaded", async () => {
+                try {
+                    const response = await fetch("/api/auth/me");
+                    if (response.status === 401 || response.status === 403) {
+                        window.location.replace("/login.html");
+                    } else if (response.ok) {
+                        const data = await response.json();
+                        console.log("Login sebagai:", data.user.username);
+                        document.getElementById("mainBody").style.display =
+                            "flex";
+
+                        // Ambil daftar perangkat saat pertama kali dimuat
+                        fetchDevices();
+                    }
+                } catch (err) {
+                    console.error("Gagal mengecek sesi", err);
+                    window.location.replace("/login.html");
+                }
+            });
+
+            async function logoutPanel() {
+                await fetch("/api/auth/logout", { method: "POST" });
+                window.location.href = "/login.html";
+            }
+
+            // Fungsi mengambil data device dari backend
+            async function fetchDevices() {
+                try {
+                    // Endpoint ini harus dibuat di routes/api.js
+                    const res = await fetch("/api/devices");
+                    if (res.ok) {
+                        const devices = await res.json();
+                        renderDevices(devices);
+                    }
+                } catch (error) {
+                    console.error("Gagal mengambil daftar perangkat", error);
+                }
+            }
+
+            // Fungsi merender HTML untuk tiap device
+            function renderDevices(devices) {
+                const container = document.getElementById(
+                    "deviceListContainer",
+                );
+                const list = document.getElementById("deviceList");
+
+                if (!devices || devices.length === 0) {
+                    container.classList.add("hidden");
+                    return;
+                }
+
+                container.classList.remove("hidden");
+                list.innerHTML = ""; // Kosongkan list
+
+                devices.forEach((device) => {
+                    const isConnected = device.status
+                        .toLowerCase()
+                        .includes("terhubung");
+                    const statusColor = isConnected
+                        ? "text-green-500"
+                        : "text-yellow-500";
+                    const iconColor = isConnected
+                        ? "text-green-500"
+                        : "text-gray-400";
+
+                    const item = document.createElement("div");
+                    item.className =
+                        "flex justify-between items-center p-3 border border-gray-200 rounded-lg bg-gray-50";
+                    item.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <i class="fab fa-whatsapp text-3xl ${iconColor}"></i>
+                            <div>
+                                <p class="font-bold text-gray-800 tracking-wide">+${device.phoneNumber}</p>
+                                <p class="text-xs font-medium ${statusColor}"><i class="fas fa-circle text-[8px] mr-1"></i>${device.status}</p>
+                            </div>
+                        </div>
+                        <button onclick="logoutDevice('${device.phoneNumber}')" class="text-red-500 hover:text-red-700 transition-colors p-2 rounded-full hover:bg-red-50" title="Logout Perangkat">
+                            <i class="fas fa-power-off text-lg"></i>
+                        </button>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+
+            // Fungsi untuk memutuskan koneksi WhatsApp
+            async function logoutDevice(phoneNumber) {
+                if (
+                    !confirm(
+                        `Apakah Anda yakin ingin mengeluarkan nomor +${phoneNumber}?\nKoneksi WhatsApp akan terputus.`,
+                    )
+                )
+                    return;
+
+                try {
+                    // Endpoint ini harus menggunakan sock.logout() di backend
+                    const res = await fetch("/api/end-session", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ phoneNumber }),
+                    });
+
+                    const data = await res.json();
+                    if (res.ok) {
+                        alert("Perangkat berhasil dikeluarkan.");
+                        fetchDevices(); // Refresh list otomatis
+                    } else {
+                        alert(data.error || "Gagal mengeluarkan perangkat");
+                    }
+                } catch (err) {
+                    alert("Terjadi kesalahan jaringan");
+                }
+            }
+
+            // --- SOCKET & FUNGSI LOGIN UTAMA ---
             const socket = io();
 
-            // Menerima Pairing Code dari server
+            const phoneInput = document.getElementById("phoneInput");
+            const phoneError = document.getElementById("phoneError");
+            const loginBtn = document.getElementById("loginBtn");
+            const btnText = document.getElementById("btnText");
+            const btnSpinner = document.getElementById("btnSpinner");
+            const resultArea = document.getElementById("resultArea");
+            const statusDisplay = document.getElementById("statusDisplay");
+            const pairingCodeContainer = document.getElementById(
+                "pairingCodeContainer",
+            );
+            const pairingCodeDisplay =
+                document.getElementById("pairingCodeDisplay");
+            const qrDisplay = document.getElementById("qrDisplay");
+
+            const currentPhoneInput = () => phoneInput.value.trim();
+
+            const setButtonLoading = (isLoading) => {
+                if (isLoading) {
+                    loginBtn.disabled = true;
+                    loginBtn.classList.add("opacity-70", "cursor-not-allowed");
+                    btnText.innerText = "Memproses...";
+                    btnSpinner.classList.remove("hidden");
+                } else {
+                    loginBtn.disabled = false;
+                    loginBtn.classList.remove(
+                        "opacity-70",
+                        "cursor-not-allowed",
+                    );
+                    btnText.innerText = "Dapatkan Kode";
+                    btnSpinner.classList.add("hidden");
+                }
+            };
+
+            const showStatus = (message, type = "info") => {
+                resultArea.classList.remove("hidden");
+                statusDisplay.innerText = message;
+                statusDisplay.className =
+                    "text-sm font-medium mb-3 " +
+                    (type === "error"
+                        ? "text-red-500"
+                        : type === "success"
+                          ? "text-green-600"
+                          : "text-gray-600");
+            };
+
             socket.on("pairing-code", (data) => {
-                document.getElementById("statusDisplay").innerText =
-                    `Masukkan kode ini di notifikasi WA HP-mu:`;
-                document.getElementById("pairingCodeDisplay").innerText =
-                    data.code;
+                if (data.phoneNumber === currentPhoneInput()) {
+                    setButtonLoading(false);
+                    showStatus("Menunggu konfirmasi di HP Anda...", "success");
+                    pairingCodeContainer.classList.remove("hidden");
+                    pairingCodeDisplay.innerText = data.code;
+                    fetchDevices(); // Refresh untuk melihat status "Menghubungkan..."
+                }
             });
 
-            // Menerima status koneksi
             socket.on("status", (data) => {
-                document.getElementById("statusDisplay").innerText =
-                    `Status: ${data.status}`;
-                document.getElementById("statusDisplay").style.color = "green";
+                // Refresh list setiap ada perubahan status apapun (reconnect, disconnect, connected)
+                fetchDevices();
+
+                if (data.phoneNumber === currentPhoneInput()) {
+                    if (
+                        data.status.toLowerCase().includes("terhubung") ||
+                        data.status.toLowerCase().includes("open")
+                    ) {
+                        showStatus(
+                            "✅ Perangkat Berhasil Terhubung!",
+                            "success",
+                        );
+                        pairingCodeContainer.classList.add("hidden");
+                    } else {
+                        showStatus(`Status: ${data.status}`, "info");
+                    }
+                }
             });
 
-            // Menerima QR Code (Jika mau pakai QR)
             socket.on("qr-code", (data) => {
-                document.getElementById("statusDisplay").innerText =
-                    `Atau scan QR Code ini:`;
-                document.getElementById("qrDisplay").src = data.qrImage;
-                document.getElementById("qrDisplay").style.display = "block";
+                if (data.phoneNumber === currentPhoneInput()) {
+                    showStatus("Atau scan QR Code ini:", "info");
+                    qrDisplay.src = data.qrImage;
+                    qrDisplay.classList.remove("hidden");
+                }
             });
 
-            function startLogin() {
-                const phoneNumber = document.getElementById("phoneInput").value;
-                if (!phoneNumber) return alert("Isi nomor dulu!");
+            async function startLogin() {
+                const phoneNumber = currentPhoneInput();
 
-                document.getElementById("statusDisplay").innerText =
-                    "Meminta kode ke server...";
+                phoneError.classList.add("hidden");
+                phoneInput.classList.remove("border-red-500");
+                pairingCodeContainer.classList.add("hidden");
+                qrDisplay.classList.add("hidden");
 
-                fetch("/api/start-session", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ phoneNumber }),
-                });
+                if (!phoneNumber) {
+                    phoneError.classList.remove("hidden");
+                    phoneInput.classList.add("border-red-500");
+                    phoneInput.focus();
+                    return;
+                }
+
+                setButtonLoading(true);
+                showStatus("Meminta kode ke server...", "info");
+
+                try {
+                    const response = await fetch("/api/start-session", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ phoneNumber }),
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        setButtonLoading(false);
+                        showStatus(result.error || "Gagal memproses", "error");
+                    }
+
+                    if (
+                        response.ok &&
+                        result.message.includes("sudah berjalan")
+                    ) {
+                        setButtonLoading(false);
+                        showStatus(
+                            "✅ Nomor ini sudah login dan aktif.",
+                            "info",
+                        );
+                    }
+                } catch (err) {
+                    console.error(err);
+                    setButtonLoading(false);
+                    showStatus("Terjadi kesalahan jaringan", "error");
+                }
             }
         </script>
     </body>

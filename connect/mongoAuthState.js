@@ -1,19 +1,22 @@
 // mongoAuthState.js
 const { initAuthCreds, BufferJSON, proto } = require('@whiskeysockets/baileys');
 const { SessionModel } = require('./db');
+const { Mutex } = require('async-mutex');
+const mutex = new Mutex();
 
 async function useMongoDBAuthState(sessionId) {
     // Membaca data dari MongoDB
     const readData = async (id) => {
         try {
             const doc = await SessionModel.findOne({ sessionId, id });
-            if (doc) {
-                // BufferJSON.reviver wajib dipakai karena Baileys menggunakan tipe data Buffer
+            if (doc && doc.data) {
                 return JSON.parse(doc.data, BufferJSON.reviver);
             }
             return null;
         } catch (error) {
-            console.error('Error membaca data:', error);
+            console.error('Data korup terdeteksi pada ID:', id);
+            // Jika data korup, sebaiknya hapus data agar tidak dibaca lagi
+            await removeData(id);
             return null;
         }
     };
@@ -68,42 +71,44 @@ async function useMongoDBAuthState(sessionId) {
                     return data;
                 },
                 set: async (data) => {
-                    const bulkOps = [];
+                    await mutex.runExclusive(async () => {
+                        const bulkOps = [];
 
-                    for (const category in data) {
-                        for (const id in data[category]) {
-                            const value = data[category][id];
-                            const key = `${category}-${id}`;
+                        for (const category in data) {
+                            for (const id in data[category]) {
+                                const value = data[category][id];
+                                const key = `${category}-${id}`;
 
-                            if (value) {
-                                // Persiapkan data untuk ditambahkan/diupdate
-                                const dataString = JSON.stringify(value, BufferJSON.replacer);
-                                bulkOps.push({
-                                    updateOne: {
-                                        filter: { sessionId, id: key },
-                                        update: { $set: { data: dataString } },
-                                        upsert: true
-                                    }
-                                });
-                            } else {
-                                // Persiapkan data untuk dihapus
-                                bulkOps.push({
-                                    deleteOne: {
-                                        filter: { sessionId, id: key }
-                                    }
-                                });
+                                if (value) {
+                                    // Persiapkan data untuk ditambahkan/diupdate
+                                    const dataString = JSON.stringify(value, BufferJSON.replacer);
+                                    bulkOps.push({
+                                        updateOne: {
+                                            filter: { sessionId, id: key },
+                                            update: { $set: { data: dataString } },
+                                            upsert: true
+                                        }
+                                    });
+                                } else {
+                                    // Persiapkan data untuk dihapus
+                                    bulkOps.push({
+                                        deleteOne: {
+                                            filter: { sessionId, id: key }
+                                        }
+                                    });
+                                }
                             }
                         }
-                    }
 
-                    // Eksekusi semua operasi sekaligus (SANGAT CEPAT)
-                    if (bulkOps.length > 0) {
-                        try {
-                            await SessionModel.bulkWrite(bulkOps);
-                        } catch (error) {
-                            console.error('Error saat bulkWrite:', error);
+                        // Eksekusi semua operasi sekaligus (SANGAT CEPAT)
+                        if (bulkOps.length > 0) {
+                            try {
+                                await SessionModel.bulkWrite(bulkOps);
+                            } catch (error) {
+                                console.error('Error saat bulkWrite:', error);
+                            }
                         }
-                    }
+                    })
                 }
             }
         },

@@ -5,56 +5,62 @@ const { Server } = require('socket.io');
 const { default: makeWASocket, DisconnectReason } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
+const cookieParser = require('cookie-parser');
 
 const { connectDB, SessionModel } = require('./connect/db');
 const useMongoDBAuthState = require('./connect/mongoAuthState');
+const DeviceModel = require('./connect/DeviceModel'); // <-- Tambahan DeviceModel
+
+const createApiRoutes = require('./routes/api');
+const { authRouter, verifyToken } = require('./routes/auth');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// --- 🌟 TAMBAHAN BARU: SESSION POOL ---
-// Berfungsi untuk menyimpan soket-soket yang sedang online
+// Map untuk menyimpan sesi aktif dan counter percobaan koneksi
 const sessions = new Map();
+const connectionAttempts = new Map();
 
 app.use(express.static('public'));
 app.use(express.json());
+app.use(cookieParser());
 
-// --- 🌟 TAMBAHAN BARU: FUNGSI UNTUK MEMULIHKAN SESI ---
+// --- FUNGSI UNTUK MEMULIHKAN SESI ---
 async function initSessions() {
     try {
-        // Mencari semua sessionId yang unik (tidak duplikat) di dalam koleksi database
-        const sessionIds = await SessionModel.distinct('sessionId');
+        // 1. Ambil semua device yang statusnya 'Terhubung'
+        const activeDevices = await DeviceModel.find({ status: 'Terhubung' });
 
-        if (sessionIds.length === 0) {
-            console.log('ℹ️ Tidak ada sesi yang tersimpan di database.');
+        if (activeDevices.length === 0) {
+            console.log('ℹ️ Tidak ada sesi yang perlu dipulihkan.');
             return;
         }
 
-        console.log(`🔄 Ditemukan ${sessionIds.length} sesi di database. Memulihkan koneksi...`);
+        console.log(`🔄 Memulihkan ${activeDevices.length} sesi aktif...`);
 
-        // Looping untuk menyalakan kembali setiap nomor WA
-        for (const sessionId of sessionIds) {
-            console.log(`Menghubungkan kembali nomor: ${sessionId}...`);
-            // Panggil fungsi Baileys, ia akan otomatis membaca creds dari DB 
-            // dan langsung berstatus 'open' tanpa minta Pairing Code lagi
-            connectToWhatsApp(sessionId);
+        for (const device of activeDevices) {
+            // 2. Kirim userId ke connectToWhatsApp agar status sinkron
+            // Pastikan Anda sudah mengubah definisi function connectToWhatsApp(phoneNumber, userId)
+            connectToWhatsApp(device.phoneNumber, device.userId);
 
-            // Beri sedikit jeda (opsional) agar tidak terlalu spam ke server WA jika sesinya banyak
+            // Beri jeda 1 detik agar tidak membombardir server WhatsApp
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
     } catch (error) {
-        console.error('❌ Gagal memulihkan sesi dari database:', error);
+        console.error('❌ Gagal memulihkan sesi:', error);
     }
 }
 
-// Ubah cara pemanggilan connectDB menjadi seperti ini agar initSessions berjalan setelah DB siap
-connectDB().then(() => {
-    initSessions();
-});
+connectDB().then(() => initSessions());
 
-// 1. KITA BUNGKUS LOGIKA BAILEYS KE DALAM FUNGSI INI
-async function connectToWhatsApp(phoneNumber) {
+// --- FUNGSI UTAMA BAILEYS ---
+async function connectToWhatsApp(phoneNumber, userId = null) {
+    if (sessions.has(phoneNumber)) {
+        try { sessions.get(phoneNumber).end(); } catch (e) { }
+        sessions.delete(phoneNumber);
+    }
+
     const { state, saveCreds } = await useMongoDBAuthState(phoneNumber);
 
     const sock = makeWASocket({
@@ -69,11 +75,16 @@ async function connectToWhatsApp(phoneNumber) {
     if (!sock.authState.creds.registered) {
         setTimeout(async () => {
             try {
+                // Minta pairing code
                 const code = await sock.requestPairingCode(phoneNumber);
-                console.log(`Pairing code untuk ${phoneNumber}: ${code}`);
                 io.emit('pairing-code', { phoneNumber, code });
             } catch (err) {
-                console.error('Gagal meminta pairing code:', err);
+                // Abaikan error 428 jika koneksi keburu diputus
+                if (err?.output?.statusCode === 428 || err?.message === 'Connection Closed') {
+                    console.log(`⚠️ Batal meminta pairing code untuk ${phoneNumber} karena koneksi sudah diputus.`);
+                } else {
+                    console.error(`❌ Error request pairing code ${phoneNumber}:`, err);
+                }
             }
         }, 3000);
     }
@@ -81,110 +92,111 @@ async function connectToWhatsApp(phoneNumber) {
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
 
-        if (connection === 'open') {
-            io.emit('status', { phoneNumber, status: 'Connected!' });
-            console.log(`✅ Nomor ${phoneNumber} berhasil terhubung! Data aman di database.`);
-
-            // --- 🌟 TAMBAHAN BARU: SIMPAN SOKET KE POOL ---
-            sessions.set(phoneNumber, sock);
+        // --- 1. Sinyal Sedang Menghubungkan ---
+        if (connection === 'connecting') {
+            io.emit('status', { phoneNumber, status: 'Menghubungkan...' });
         }
+        // --- 2. Sinyal Berhasil Terhubung ---
+        else if (connection === 'open') {
+            connectionAttempts.delete(phoneNumber);
+            sessions.set(phoneNumber, sock);
+            console.log(`✅ ${phoneNumber} terhubung!`);
+
+            // Update status di database DeviceModel menjadi Terhubung
+            try {// Pastikan record ada di DeviceModel
+                if (userId) {
+                    await DeviceModel.findOneAndUpdate(
+                        { phoneNumber },
+                        { userId, status: 'Terhubung', connectedAt: new Date() },
+                        { upsert: true }
+                    );
+                }
+            } catch (dbErr) { console.error('Gagal update DeviceModel:', dbErr); }
+
+            io.emit('status', { phoneNumber, status: 'Terhubung' });
+        }
+        // --- 3. Sinyal Koneksi Terputus / Gagal ---
         else if (connection === 'close') {
-            // --- 🌟 TAMBAHAN BARU: HAPUS SOKET DARI POOL SAAT TERPUTUS ---
-            sessions.delete(phoneNumber);
+            const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+            console.log(`⚠️ Koneksi ${phoneNumber} terputus. Kode:`, statusCode);
 
-            const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+            // Handle Error Sesi Korup / Logged Out (401)
+            if (statusCode === 401 || statusCode === DisconnectReason.loggedOut) {
+                console.log(`❌ Sesi ${phoneNumber} tidak valid. Mencoba logout otomatis...`);
 
-            console.log(`⚠️ Koneksi untuk ${phoneNumber} terputus. Alasan:`, reason);
+                // BEST EFFORT: Coba paksa logout dari HP
+                try {
+                    await sock.logout();
+                    console.log(`✅ Berhasil mengirim perintah logout ke HP untuk sesi ${phoneNumber}`);
+                } catch (err) {
+                    console.log(`⚠️ Gagal logout otomatis ke HP (wajar karena sesi rusak). User harus logout manual.`);
+                }
 
-            if (reason === DisconnectReason.loggedOut) { // 401
-                console.log(`❌ Perangkat dikeluarkan (Logged Out). Menghapus data dari database...`);
+                // Hapus data dari Database (Session & Device) & Memori
+                console.log(`Menghapus database sesi ${phoneNumber}...`);
                 await SessionModel.deleteMany({ sessionId: phoneNumber });
-                io.emit('status', { phoneNumber, status: 'Logged out. Silakan login ulang.' });
+
+                try {
+                    await DeviceModel.deleteOne({ phoneNumber });
+                } catch (dbErr) { console.error('Gagal hapus DeviceModel:', dbErr); }
+
+                sessions.delete(phoneNumber);
+
+                // Beritahu Frontend
+                io.emit('status', {
+                    phoneNumber,
+                    status: 'Sesi kedaluwarsa. Jika perangkat masih ada di HP, harap hapus manual lalu hubungkan ulang.'
+                });
+
+                return;
             }
-            else if (reason === DisconnectReason.restartRequired) { // 515
-                console.log('🔄 Diperlukan restart (Server meminta restart). Menghubungkan ulang...');
-                connectToWhatsApp(phoneNumber);
+
+            // --- Logika Reconnect untuk Error Jaringan (503, 440, 408) ---
+            if (statusCode === 503 || statusCode === 440 || statusCode === 408) {
+                const attempts = (connectionAttempts.get(phoneNumber) || 0) + 1;
+                connectionAttempts.set(phoneNumber, attempts);
+                const delay = Math.min(attempts * 10000, 60000);
+
+                console.log(`🔄 Error ${statusCode}. Reconnect ${phoneNumber} dalam ${delay / 1000} detik...`);
+                io.emit('status', { phoneNumber, status: `Menunggu jaringan (${delay / 1000}s)...` });
+
+                setTimeout(() => connectToWhatsApp(phoneNumber), delay);
             }
-            else if (reason === DisconnectReason.connectionClosed) { // 428 / 408
-                console.log('🔄 Koneksi terputus, mencoba menghubungkan kembali...');
-                connectToWhatsApp(phoneNumber);
-            }
-            else if (reason === DisconnectReason.badSession) { // 500
-                console.log(`❌ Sesi buruk/korup. Menghapus data dari database...`);
-                await SessionModel.deleteMany({ sessionId: phoneNumber });
-                io.emit('status', { phoneNumber, status: 'Sesi korup, silakan minta kode lagi' });
-            }
+            // Default retry untuk error lain
             else {
-                console.log('🔄 Error tidak diketahui, mencoba menghubungkan ulang...');
-                connectToWhatsApp(phoneNumber);
+                console.log(`🔄 Mencoba menghubungkan ulang ${phoneNumber}...`);
+                io.emit('status', { phoneNumber, status: 'Menghubungkan ulang...' });
+
+                setTimeout(() => connectToWhatsApp(phoneNumber), 5000);
             }
         }
     });
 
-    // --- 🌟 TAMBAHAN BARU: MENDENGARKAN PESAN MASUK ---
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
-
-        // Jangan proses pesan dari diri sendiri atau jika tidak ada teksnya
         if (!msg.message || msg.key.fromMe) return;
-
         const sender = msg.key.remoteJid;
-        const textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text;
+        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
-        console.log(`[${phoneNumber}] Pesan masuk dari ${sender}: ${textMessage}`);
+        if (text?.toLowerCase() === 'ping') {
+            // 1. Kirim status "Sedang mengetik..."
+            await sock.sendPresenceUpdate('composing', sender);
 
-        // Contoh Auto-Reply: Membalas 'ping' dengan 'Pong!'
-        if (textMessage && textMessage.toLowerCase() === 'ping') {
-            await sock.sendMessage(sender, { text: 'Pong! Bot berjalan lancar 🤖' });
+            // 2. Beri jeda buatan selama 1 detik
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // 3. Kirim pesan balasannya
+            await sock.sendMessage(sender, { text: 'Pong! 🤖' });
+
+            // 4. Hentikan status mengetik
+            await sock.sendPresenceUpdate('paused', sender);
         }
     });
 }
 
-// 2. ENDPOINT API UNTUK LOGIN
-app.post('/api/start-session', async (req, res) => {
-    const { phoneNumber } = req.body;
-
-    if (!phoneNumber) return res.status(400).json({ error: 'Nomor WA wajib diisi' });
-
-    try {
-        connectToWhatsApp(phoneNumber);
-        res.json({ message: 'Memproses permintaan login...' });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Terjadi kesalahan internal' });
-    }
-});
-
-// --- 🌟 TAMBAHAN BARU: ENDPOINT API UNTUK MENGIRIM PESAN ---
-app.post('/api/send-message', async (req, res) => {
-    const { senderNumber, targetNumber, message } = req.body;
-
-    // Validasi input JSON
-    if (!senderNumber || !targetNumber || !message) {
-        return res.status(400).json({ error: 'senderNumber, targetNumber, dan message wajib diisi' });
-    }
-
-    // Ambil soket bot yang sedang online dari Map sessions
-    const sock = sessions.get(senderNumber);
-    if (!sock) {
-        return res.status(401).json({ error: `Nomor pengirim ${senderNumber} tidak aktif. Silakan login terlebih dahulu.` });
-    }
-
-    try {
-        // Format nomor target dengan suffix WhatsApp
-        const jid = `${targetNumber}@s.whatsapp.net`;
-
-        // Eksekusi kirim pesan
-        await sock.sendMessage(jid, { text: message });
-
-        res.json({ success: true, message: 'Pesan berhasil dikirim!' });
-    } catch (error) {
-        console.error('Error saat mengirim pesan:', error);
-        res.status(500).json({ error: 'Gagal mengirim pesan' });
-    }
-});
+app.use('/api/auth', authRouter);
+const apiRoutes = createApiRoutes(sessions, connectToWhatsApp);
+app.use('/api', verifyToken, apiRoutes);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log('🚀 Server berjalan di http://localhost:3000');
-});
+server.listen(PORT, () => console.log(`🚀 Server berjalan di http://localhost:${PORT}`));
