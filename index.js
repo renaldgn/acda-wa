@@ -41,10 +41,9 @@ async function initSessions() {
 
         for (const device of activeDevices) {
             // 2. Kirim userId ke connectToWhatsApp agar status sinkron
-            // Pastikan Anda sudah mengubah definisi function connectToWhatsApp(phoneNumber, userId)
             connectToWhatsApp(device.phoneNumber, device.userId);
 
-            // Beri jeda 1 detik agar tidak membombardir server WhatsApp
+            // Beri jeda 2 detik agar tidak membombardir server WhatsApp
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
     } catch (error) {
@@ -66,52 +65,53 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
     const sock = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        logger: pino({ level: 'silent' }),
+        logger: pino({ level: 'silent' }), // Log disilent agar terminal tidak penuh
         browser: ['Ubuntu', 'Chrome', '20.0.04']
     });
 
     sock.ev.on('creds.update', saveCreds);
-    
+
+    // --- PERBAIKAN: SISTEM RETRY UNTUK PAIRING CODE ---
     if (!sock.authState.creds.registered) {
-        // Buat fungsi rekursif untuk mencoba request ulang jika koneksi belum siap
         const requestPairing = async (attempt = 1) => {
             try {
-                // Beri jeda agak lama agar websocket benar-benar siap (terutama untuk sesi ke-2 dst)
+                // Beri jeda lebih lama di awal agar websocket benar-benar siap
                 await new Promise(resolve => setTimeout(resolve, 4000));
 
                 console.log(`⏳ Meminta pairing code untuk ${phoneNumber} (Percobaan ${attempt})...`);
                 const code = await sock.requestPairingCode(phoneNumber);
 
-                // Kirim kode ke frontend
+                // Kirim kode ke frontend jika berhasil
                 io.emit('pairing-code', { phoneNumber, code });
 
             } catch (err) {
-                // Jika koneksi belum siap (428) atau tertutup
+                // Jika koneksi websocket belum siap (428) atau terputus sementara
                 if (err?.output?.statusCode === 428 || err?.message === 'Connection Closed') {
-                    console.log(`⚠️ Koneksi belum siap untuk ${phoneNumber}.`);
+                    console.log(`⚠️ Koneksi belum siap untuk ${phoneNumber} (Error 428).`);
 
-                    if (attempt < 3) {
+                    if (attempt < 4) { // Maksimal coba ulang 4 kali
                         console.log(`🔄 Mengulang request pairing code dalam 2 detik...`);
                         await new Promise(resolve => setTimeout(resolve, 2000));
-                        return requestPairing(attempt + 1); // Coba lagi
+                        return requestPairing(attempt + 1);
                     } else {
-                        // BERITAHU FRONTEND JIKA GAGAL TOTAL AGAR TIDAK STUCK
+                        console.log(`❌ Batal meminta pairing code untuk ${phoneNumber}, batas percobaan habis.`);
+                        // Cegah UI nyangkut dengan memberitahu frontend
                         io.emit('status', {
                             phoneNumber,
-                            status: 'Gagal meminta kode. Harap hapus perangkat dan coba lagi.'
+                            status: 'Koneksi lambat. Harap hapus perangkat dan coba lagi.'
                         });
                     }
                 } else {
                     console.error(`❌ Error request pairing code ${phoneNumber}:`, err);
                     io.emit('status', {
                         phoneNumber,
-                        status: 'Terjadi kesalahan sistem. Cek terminal server.'
+                        status: 'Gagal meminta kode pairing. Cek terminal server.'
                     });
                 }
             }
         };
 
-        // Jalankan fungsi
+        // Jalankan fungsi request
         requestPairing();
     }
 
@@ -129,7 +129,7 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
             console.log(`✅ ${phoneNumber} terhubung!`);
 
             // Update status di database DeviceModel menjadi Terhubung
-            try {// Pastikan record ada di DeviceModel
+            try {
                 if (userId) {
                     await DeviceModel.findOneAndUpdate(
                         { phoneNumber },
@@ -181,19 +181,19 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
             if (statusCode === 503 || statusCode === 440 || statusCode === 408) {
                 const attempts = (connectionAttempts.get(phoneNumber) || 0) + 1;
                 connectionAttempts.set(phoneNumber, attempts);
-                const delay = Math.min(attempts * 10000, 60000);
+                const delay = Math.min(attempts * 10000, 60000); // Exponential backoff
 
                 console.log(`🔄 Error ${statusCode}. Reconnect ${phoneNumber} dalam ${delay / 1000} detik...`);
                 io.emit('status', { phoneNumber, status: `Menunggu jaringan (${delay / 1000}s)...` });
 
-                setTimeout(() => connectToWhatsApp(phoneNumber), delay);
+                setTimeout(() => connectToWhatsApp(phoneNumber, userId), delay);
             }
             // Default retry untuk error lain
             else {
                 console.log(`🔄 Mencoba menghubungkan ulang ${phoneNumber}...`);
                 io.emit('status', { phoneNumber, status: 'Menghubungkan ulang...' });
 
-                setTimeout(() => connectToWhatsApp(phoneNumber), 5000);
+                setTimeout(() => connectToWhatsApp(phoneNumber, userId), 5000);
             }
         }
     });
@@ -205,16 +205,9 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
         if (text?.toLowerCase() === 'ping') {
-            // 1. Kirim status "Sedang mengetik..."
             await sock.sendPresenceUpdate('composing', sender);
-
-            // 2. Beri jeda buatan selama 1 detik
             await new Promise(resolve => setTimeout(resolve, 1000));
-
-            // 3. Kirim pesan balasannya
             await sock.sendMessage(sender, { text: 'Pong! 🤖' });
-
-            // 4. Hentikan status mengetik
             await sock.sendPresenceUpdate('paused', sender);
         }
     });
