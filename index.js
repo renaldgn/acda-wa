@@ -71,22 +71,48 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
     });
 
     sock.ev.on('creds.update', saveCreds);
-
+    
     if (!sock.authState.creds.registered) {
-        setTimeout(async () => {
+        // Buat fungsi rekursif untuk mencoba request ulang jika koneksi belum siap
+        const requestPairing = async (attempt = 1) => {
             try {
-                // Minta pairing code
+                // Beri jeda agak lama agar websocket benar-benar siap (terutama untuk sesi ke-2 dst)
+                await new Promise(resolve => setTimeout(resolve, 4000));
+
+                console.log(`⏳ Meminta pairing code untuk ${phoneNumber} (Percobaan ${attempt})...`);
                 const code = await sock.requestPairingCode(phoneNumber);
+
+                // Kirim kode ke frontend
                 io.emit('pairing-code', { phoneNumber, code });
+
             } catch (err) {
-                // Abaikan error 428 jika koneksi keburu diputus
+                // Jika koneksi belum siap (428) atau tertutup
                 if (err?.output?.statusCode === 428 || err?.message === 'Connection Closed') {
-                    console.log(`⚠️ Batal meminta pairing code untuk ${phoneNumber} karena koneksi sudah diputus.`);
+                    console.log(`⚠️ Koneksi belum siap untuk ${phoneNumber}.`);
+
+                    if (attempt < 3) {
+                        console.log(`🔄 Mengulang request pairing code dalam 2 detik...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        return requestPairing(attempt + 1); // Coba lagi
+                    } else {
+                        // BERITAHU FRONTEND JIKA GAGAL TOTAL AGAR TIDAK STUCK
+                        io.emit('status', {
+                            phoneNumber,
+                            status: 'Gagal meminta kode. Harap hapus perangkat dan coba lagi.'
+                        });
+                    }
                 } else {
                     console.error(`❌ Error request pairing code ${phoneNumber}:`, err);
+                    io.emit('status', {
+                        phoneNumber,
+                        status: 'Terjadi kesalahan sistem. Cek terminal server.'
+                    });
                 }
             }
-        }, 3000);
+        };
+
+        // Jalankan fungsi
+        requestPairing();
     }
 
     sock.ev.on('connection.update', async (update) => {
