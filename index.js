@@ -9,7 +9,7 @@ const cookieParser = require('cookie-parser');
 
 const { connectDB, SessionModel } = require('./connect/db');
 const useMongoDBAuthState = require('./connect/mongoAuthState');
-const DeviceModel = require('./connect/DeviceModel'); // <-- Tambahan DeviceModel
+const DeviceModel = require('./connect/DeviceModel');
 
 const createApiRoutes = require('./routes/api');
 const { authRouter, verifyToken } = require('./routes/auth');
@@ -45,7 +45,7 @@ async function initSessions() {
             connectToWhatsApp(device.phoneNumber, device.userId);
 
             // Beri jeda 1 detik agar tidak membombardir server WhatsApp
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
         }
     } catch (error) {
         console.error('❌ Gagal memulihkan sesi:', error);

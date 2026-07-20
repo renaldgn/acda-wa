@@ -1,6 +1,7 @@
 // routes/api.js
 const express = require('express');
 const DeviceModel = require('../connect/DeviceModel'); // <-- Tambahan DeviceModel
+const { SessionModel } = require('../connect/db');
 
 // Set untuk melacak nomor yang sedang dalam proses request login (Mencegah Spam)
 const processingNumbers = new Set();
