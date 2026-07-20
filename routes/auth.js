@@ -62,8 +62,14 @@ router.post('/login', async (req, res) => {
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) return res.status(400).json({ error: 'Username atau password salah' });
 
+        const payload = {
+            id: user._id,
+            username: user.username,
+            role: user.role
+        };
+
         // Buat JWT Token (Berlaku 1 Hari)
-        const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
 
         // Set token ke dalam HttpOnly Cookie
         res.cookie('token', token, {

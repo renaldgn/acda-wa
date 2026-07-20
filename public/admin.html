@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Panel Admin - Sistem WhatsApp Bot</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+            rel="stylesheet"
+        />
+    </head>
+    <body
+        id="mainBody"
+        style="display: none"
+        class="bg-gray-100 text-gray-800 font-sans antialiased min-h-screen p-6"
+    >
+        <div class="max-w-6xl mx-auto">
+            <div
+                class="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm"
+            >
+                <h1 class="text-2xl font-bold text-gray-700">
+                    <i class="fas fa-user-shield text-blue-600 mr-2"></i> Admin
+                    Control Panel
+                </h1>
+                <a
+                    href="/index.html"
+                    class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition"
+                >
+                    <i class="fas fa-arrow-left mr-1"></i> Kembali ke Dashboard
+                </a>
+            </div>
+
+            <div
+                class="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-2"
+            >
+                <button
+                    onclick="switchTab('users')"
+                    id="tabBtnUsers"
+                    class="px-5 py-2.5 rounded-lg font-bold text-sm bg-blue-600 text-white shadow-sm transition"
+                >
+                    <i class="fas fa-users mr-2"></i> Pengguna (Users)
+                </button>
+                <button
+                    onclick="switchTab('devices')"
+                    id="tabBtnDevices"
+                    class="px-5 py-2.5 rounded-lg font-bold text-sm bg-white text-gray-600 hover:bg-gray-200 shadow-sm transition"
+                >
+                    <i class="fas fa-mobile-alt mr-2"></i> Perangkat (Devices)
+                </button>
+                <button
+                    onclick="switchTab('logs')"
+                    id="tabBtnLogs"
+                    class="px-5 py-2.5 rounded-lg font-bold text-sm bg-white text-gray-600 hover:bg-gray-200 shadow-sm transition"
+                >
+                    <i class="fas fa-file-alt mr-2"></i> Sistem Log (Logs)
+                </button>
+            </div>
+
+            <div
+                id="sectionUsers"
+                class="bg-white rounded-xl shadow-md w-full overflow-hidden border border-gray-100"
+            >
+                <div class="bg-blue-600 p-4 text-white">
+                    <h3 class="text-lg font-bold">Daftar Akun Pengguna</h3>
+                </div>
+                <div class="p-0 overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr
+                                class="bg-gray-50 text-gray-600 text-sm border-b"
+                            >
+                                <th class="p-4 font-semibold w-1/3">
+                                    Username
+                                </th>
+                                <th class="p-4 font-semibold w-1/3">
+                                    Role / Hak Akses
+                                </th>
+                                <th class="p-4 font-semibold text-center w-1/3">
+                                    Aksi Ubah Role
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody
+                            id="users-table-body"
+                            class="text-sm divide-y divide-gray-100"
+                        >
+                            <tr>
+                                <td
+                                    colspan="3"
+                                    class="p-6 text-center text-gray-400"
+                                >
+                                    Memuat data pengguna...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div
+                id="sectionDevices"
+                class="bg-white rounded-xl shadow-md w-full overflow-hidden border border-gray-100 hidden"
+            >
+                <div
+                    class="bg-green-600 p-4 text-white flex justify-between items-center"
+                >
+                    <h3 class="text-lg font-bold">
+                        <i class="fab fa-whatsapp mr-2"></i> Daftar Seluruh
+                        Perangkat & Sesi WhatsApp Aktif
+                    </h3>
+                    <button
+                        onclick="fetchAdminDevices()"
+                        class="bg-green-700 hover:bg-green-800 text-white text-xs px-3 py-1.5 rounded transition"
+                    >
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
+                <div class="p-0 overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr
+                                class="bg-gray-50 text-gray-600 text-sm border-b"
+                            >
+                                <th class="p-4 font-semibold">
+                                    Nomor WhatsApp
+                                </th>
+                                <th class="p-4 font-semibold">
+                                    Status Koneksi
+                                </th>
+                                <th class="p-4 font-semibold">
+                                    ID Pemilik (User ID)
+                                </th>
+                                <th class="p-4 font-semibold text-center">
+                                    Aksi (Hapus Sesi & DB)
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody
+                            id="devices-table-body"
+                            class="text-sm divide-y divide-gray-100"
+                        >
+                            <tr>
+                                <td
+                                    colspan="4"
+                                    class="p-6 text-center text-gray-400"
+                                >
+                                    Memuat data perangkat...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div
+                id="sectionLogs"
+                class="bg-white rounded-xl shadow-md w-full overflow-hidden border border-gray-100 hidden"
+            >
+                <div
+                    class="bg-purple-600 p-4 text-white flex justify-between items-center"
+                >
+                    <h3 class="text-lg font-bold">
+                        <i class="fas fa-file-code mr-2"></i> Server Logs Viewer
+                    </h3>
+                    <button
+                        onclick="fetchLogList()"
+                        class="bg-purple-700 hover:bg-purple-800 text-white text-xs px-3 py-1.5 rounded transition"
+                    >
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh File List
+                    </button>
+                </div>
+                <div class="p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="md:col-span-1 border-r pr-2 border-gray-200">
+                        <p
+                            class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"
+                        >
+                            Pilih Tanggal Log:
+                        </p>
+                        <div
+                            id="logFileList"
+                            class="flex flex-col gap-1.5 max-h-96 overflow-y-auto"
+                        >
+                            <span class="text-xs text-gray-400"
+                                >Memuat daftar log...</span
+                            >
+                        </div>
+                    </div>
+                    <div class="md:col-span-3 flex flex-col">
+                        <div class="flex justify-between items-center mb-2">
+                            <span
+                                id="activeLogTitle"
+                                class="text-xs font-semibold text-gray-600"
+                                >Belum ada file log yang dipilih</span
+                            >
+                        </div>
+                        <pre
+                            id="logContentDisplay"
+                            class="bg-gray-900 text-green-400 p-4 rounded-lg h-96 overflow-y-auto font-mono text-xs leading-relaxed select-all"
+                        >
+Pilih salah satu file log di sebelah kiri untuk melihat isinya...</pre
+                        >
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // --- PROTEKSI & INISIALISASI ---
+            document.addEventListener("DOMContentLoaded", async () => {
+                try {
+                    const response = await fetch("/api/auth/me");
+                    if (!response.ok) {
+                        window.location.replace("/login.html");
+                        return;
+                    }
+                    const data = await response.json();
+                    if (data.user.role !== "admin") {
+                        alert("Akses Ditolak: Anda bukan Admin!");
+                        window.location.replace("/index.html");
+                        return;
+                    }
+
+                    document.getElementById("mainBody").style.display = "block";
+                    fetchAdminUsers();
+                    fetchAdminDevices();
+                    fetchLogList();
+                } catch (err) {
+                    window.location.replace("/login.html");
+                }
+            });
+
+            // --- SISTEM TAB SWITCHER ---
+            function switchTab(tab) {
+                const btnUsers = document.getElementById("tabBtnUsers");
+                const btnDevices = document.getElementById("tabBtnDevices");
+                const btnLogs = document.getElementById("tabBtnLogs");
+
+                const secUsers = document.getElementById("sectionUsers");
+                const secDevices = document.getElementById("sectionDevices");
+                const secLogs = document.getElementById("sectionLogs");
+
+                // Reset semua ke putih
+                btnUsers.className =
+                    "px-5 py-2.5 rounded-lg font-bold text-sm bg-white text-gray-600 hover:bg-gray-200 shadow-sm transition";
+                btnDevices.className =
+                    "px-5 py-2.5 rounded-lg font-bold text-sm bg-white text-gray-600 hover:bg-gray-200 shadow-sm transition";
+                btnLogs.className =
+                    "px-5 py-2.5 rounded-lg font-bold text-sm bg-white text-gray-600 hover:bg-gray-200 shadow-sm transition";
+
+                secUsers.classList.add("hidden");
+                secDevices.classList.add("hidden");
+                secLogs.classList.add("hidden");
+
+                if (tab === "users") {
+                    btnUsers.className =
+                        "px-5 py-2.5 rounded-lg font-bold text-sm bg-blue-600 text-white shadow-sm transition";
+                    secUsers.classList.remove("hidden");
+                } else if (tab === "devices") {
+                    btnDevices.className =
+                        "px-5 py-2.5 rounded-lg font-bold text-sm bg-green-600 text-white shadow-sm transition";
+                    secDevices.classList.remove("hidden");
+                } else if (tab === "logs") {
+                    btnLogs.className =
+                        "px-5 py-2.5 rounded-lg font-bold text-sm bg-purple-600 text-white shadow-sm transition";
+                    secLogs.classList.remove("hidden");
+                }
+            }
+
+            // --- MANAJEMEN USERS ---
+            async function fetchAdminUsers() {
+                try {
+                    const res = await fetch("/api/admin/users");
+                    if (res.ok) {
+                        const data = await res.json();
+                        renderAdminUsers(data.data);
+                    }
+                } catch (error) {
+                    console.error("Gagal ambil user", error);
+                }
+            }
+
+            function renderAdminUsers(users) {
+                const tbody = document.getElementById("users-table-body");
+                tbody.innerHTML = "";
+                users.forEach((user) => {
+                    const isAdmin = user.role === "admin";
+                    const tr = document.createElement("tr");
+                    tr.className = "hover:bg-gray-50 transition-colors";
+                    tr.innerHTML = `
+                        <td class="p-4 text-gray-800 font-medium">${user.username}</td>
+                        <td class="p-4">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${isAdmin ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}">${user.role}</span>
+                        </td>
+                        <td class="p-4 text-center">
+                            <select onchange="changeUserRole('${user._id}', this.value)" class="text-sm border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer bg-white shadow-sm w-3/4">
+                                <option value="user" ${!isAdmin ? "selected" : ""}>Set as User</option>
+                                <option value="admin" ${isAdmin ? "selected" : ""}>Set as Admin</option>
+                            </select>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            async function changeUserRole(userId, newRole) {
+                if (
+                    !confirm(
+                        `Yakin mengubah role user ini menjadi ${newRole.toUpperCase()}?`,
+                    )
+                ) {
+                    fetchAdminUsers();
+                    return;
+                }
+                try {
+                    const res = await fetch(`/api/admin/users/${userId}/role`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ role: newRole }),
+                    });
+                    if (res.ok) fetchAdminUsers();
+                    else alert("Gagal mengubah role.");
+                } catch (err) {
+                    alert("Kesalahan sistem.");
+                }
+            }
+
+            // --- MANAJEMEN DEVICES ---
+            async function fetchAdminDevices() {
+                try {
+                    const res = await fetch("/api/admin/devices");
+                    if (res.ok) {
+                        const data = await res.json();
+                        renderAdminDevices(data.data);
+                    }
+                } catch (error) {
+                    console.error("Gagal ambil devices", error);
+                }
+            }
+
+            function renderAdminDevices(devices) {
+                const tbody = document.getElementById("devices-table-body");
+                tbody.innerHTML = "";
+
+                if (!devices || devices.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-gray-400">Tidak ada perangkat tersambung di database.</td></tr>`;
+                    return;
+                }
+
+                devices.forEach((dev) => {
+                    const isConnected =
+                        dev.status &&
+                        dev.status.toLowerCase().includes("terhubung");
+                    const statusColor = isConnected
+                        ? "bg-green-100 text-green-700"
+                        : "bg-yellow-100 text-yellow-700";
+
+                    const tr = document.createElement("tr");
+                    tr.className = "hover:bg-gray-50 transition-colors";
+                    tr.innerHTML = `
+                        <td class="p-4 font-bold text-gray-800">+${dev.phoneNumber}</td>
+                        <td class="p-4">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${statusColor}">
+                                ${dev.status || "Tidak Diketahui"}
+                            </span>
+                        </td>
+                        <td class="p-4 font-mono text-xs text-gray-500">${dev.userId || "Sistem / Tanpa User ID"}</td>
+                        <td class="p-4 text-center">
+                            <button onclick="forceDeleteDevice('${dev.phoneNumber}')" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-semibold transition shadow-sm" title="Hapus perangkat & bersihkan file sesi whatsapp_sessions">
+                                <i class="fas fa-trash-alt mr-1"></i> Hapus Sesi & DB
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            async function forceDeleteDevice(phoneNumber) {
+                if (
+                    !confirm(
+                        `⚠️ PERINGATAN KERAS:\nTindakan ini akan menghapus nomor +${phoneNumber} dan membersihkan seluruh data enkripsi sesi di koleksi database 'whatsapp_sessions' secara permanen!\n\nLanjutkan?`,
+                    )
+                )
+                    return;
+
+                try {
+                    const res = await fetch(
+                        `/api/admin/devices/${phoneNumber}`,
+                        { method: "DELETE" },
+                    );
+                    const data = await res.json();
+                    if (res.ok) {
+                        alert("Berhasil membersihkan perangkat dan sesi.");
+                        fetchAdminDevices();
+                    } else {
+                        alert("Gagal: " + data.error);
+                    }
+                } catch (err) {
+                    alert("Terjadi kesalahan jaringan.");
+                }
+            }
+
+            // --- SISTEM LOGS VIEWER ---
+            async function fetchLogList() {
+                try {
+                    const res = await fetch("/api/admin/logs/list");
+                    if (res.ok) {
+                        const data = await res.json();
+                        renderLogFileList(data.data);
+                    }
+                } catch (err) {
+                    console.error("Gagal mengambil list log", err);
+                }
+            }
+
+            function renderLogFileList(files) {
+                const listContainer = document.getElementById("logFileList");
+                listContainer.innerHTML = "";
+
+                if (!files || files.length === 0) {
+                    listContainer.innerHTML = `<span class="text-xs text-gray-400">Belum ada file log tersimpan.</span>`;
+                    return;
+                }
+
+                files.forEach((file, index) => {
+                    const btn = document.createElement("button");
+                    btn.className =
+                        "text-left text-xs font-mono font-medium p-2.5 rounded-lg bg-gray-50 hover:bg-purple-50 hover:text-purple-700 border border-gray-200 transition truncate";
+                    btn.innerText = file;
+                    btn.onclick = () => loadLogContent(file, btn);
+                    listContainer.appendChild(btn);
+
+                    // Otomatis load file log pertama (terbaru) saat pertama kali buka
+                    if (index === 0) {
+                        loadLogContent(file, btn);
+                    }
+                });
+            }
+
+            async function loadLogContent(filePath, btnElement) {
+                // Beri efek aktif pada tombol yang dipilih
+                document
+                    .querySelectorAll("#logFileList button")
+                    .forEach((b) =>
+                        b.classList.remove(
+                            "border-purple-500",
+                            "bg-purple-50",
+                            "text-purple-700",
+                            "font-bold",
+                        ),
+                    );
+                if (btnElement) {
+                    btnElement.classList.add(
+                        "border-purple-500",
+                        "bg-purple-50",
+                        "text-purple-700",
+                        "font-bold",
+                    );
+                }
+
+                document.getElementById("activeLogTitle").innerText =
+                    `Membaca file: ${filePath}`;
+                document.getElementById("logContentDisplay").innerText =
+                    "Memuat isi log...";
+
+                try {
+                    const res = await fetch(
+                        `/api/admin/logs/read?file=${encodeURIComponent(filePath)}`,
+                    );
+                    const data = await res.json();
+                    if (res.ok) {
+                        const contentDisplay =
+                            document.getElementById("logContentDisplay");
+                        contentDisplay.innerText =
+                            data.content || "[ File log kosong ]";
+                        // Auto-scroll ke baris paling bawah (log terbaru)
+                        contentDisplay.scrollTop = contentDisplay.scrollHeight;
+                    } else {
+                        document.getElementById("logContentDisplay").innerText =
+                            "Gagal memuat isi file log: " + data.error;
+                    }
+                } catch (err) {
+                    document.getElementById("logContentDisplay").innerText =
+                        "Terjadi kesalahan jaringan saat membaca log.";
+                }
+            }
+        </script>
+    </body>
+</html>
