@@ -6,7 +6,7 @@ const sessionSchema = new mongoose.Schema({
     id: { type: String, required: true },
     data: { type: String, required: true }
 });
-const SessionModel = mongoose.model('whatsapp_sessions', sessionSchema);
+const SessionModel = mongoose.model('session', sessionSchema);
 
 const connectDB = () => {
     return new Promise((resolve) => {
