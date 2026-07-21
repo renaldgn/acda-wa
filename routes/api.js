@@ -135,48 +135,54 @@ function createApiRoutes(sessions, connectToWhatsApp) {
     });
 
     // 5. Endpoint untuk ambil semua grup
-    // 5. Endpoint untuk ambil semua grup
     router.get('/groups', async (req, res) => {
         try {
-            const { userId } = req.query; // Parameter dari frontend (bisa berupa phoneNumber atau userId)
+            const { phoneNumber } = req.query;
+            console.log('🔍 Debug - Request groups untuk phoneNumber:', phoneNumber);
+            console.log('📦 Sesi aktif saat ini:', Array.from(sessions.keys()));
 
-            if (!userId) {
-                return res.status(400).json({ success: false, message: 'Parameter perangkat tidak boleh kosong.' });
-            }
+            const sock = sessions.get(phoneNumber);
 
-            // 1. Cek langsung di Map berdasarkan key (misal parameter yang dikirim adalah phoneNumber)
-            let sock = sessions.get(userId);
-
-            // 2. Jika tidak ketemu langsung di Map, kemungkinan `userId` yang dikirim adalah ID Database / User ID. 
-            // Mari kita cari data Device di MongoDB berdasarkan userId atau phoneNumber.
             if (!sock) {
+                console.log(`⚠️ Sesi ${phoneNumber} tidak ditemukan di memori. Mencoba memuat dari database...`);
+                // Cari data device di MongoDB
                 const device = await DeviceModel.findOne({
-                    $or: [{ userId: userId }, { phoneNumber: userId }]
+                    $or: [{ userId: phoneNumber }, { phoneNumber: phoneNumber }]
                 });
 
-                if (device) {
-                    // Cek kembali menggunakan nomor telepon dari data database yang ditemukan
-                    sock = sessions.get(device.phoneNumber);
+                if (!device || device.status !== 'Terhubung') {
+                    return res.status(404).json({
+                        success: false,
+                        message: `Sesi ${phoneNumber} tidak ditemukan atau belum terhubung secara aktif.`
+                    });
                 }
+                // Panggil kembali fungsi koneksi WhatsApp untuk meregenerasi socket dan memasukkannya ke sessions.set
+                // Pastikan fungsi connectToWhatsApp mengembalikan instance socket (sock)
+                sock = await connectToWhatsApp(device.phoneNumber, device.userId);
+
+                // Beri jeda sejenak agar socket siap digunakan
+                await new Promise(resolve => setTimeout(resolve, 3000));
             }
 
-            // Jika setelah dicari tetap tidak ada socket yang aktif di memori
-            if (!sock) {
-                return res.status(404).json({
+            // Cek ulang setelah proses pemuatan
+            if (!sessions.has(phoneNumber)) {
+                return res.status(500).json({
                     success: false,
-                    message: `Sesi untuk perangkat '${userId}' tidak ditemukan di memori server atau belum terhubung.`
+                    message: 'Gagal menginisialisasi sesi ke dalam memori server.'
                 });
             }
 
-            // Ambil daftar grup menggunakan fungsi bawaan Baileys
-            const fetchedGroups = await sock.groupFetchAllParticipating();
+            // Ambil socket yang aktif dari map (gunakan key yang sesuai)
+            const activeSock = sessions.get(phoneNumber);
+
+            // 3. Ambil daftar grup menggunakan fungsi bawaan Baileys
+            const fetchedGroups = await activeSock.groupFetchAllParticipating();
             const groupsArray = Object.values(fetchedGroups);
 
             res.json({ success: true, groups: groupsArray });
-
         } catch (error) {
-            console.error('❌ Gagal mengambil data grup:', error);
-            res.status(500).json({ success: false, message: 'Gagal mengambil data grup dari WhatsApp.' });
+            console.error('Error fetching groups:', error);
+            res.status(500).json({ success: false, message: 'Gagal mengambil data grup.' });
         }
     });
 
