@@ -9,4 +9,4 @@ const chatSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now }   // Waktu pesan diterima
 });
 
-module.exports = mongoose.model('Chat', chatSchema);
+module.exports = mongoose.model('Chat_group', chatSchema);

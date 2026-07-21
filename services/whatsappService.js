@@ -5,7 +5,7 @@ const pino = require('pino');
 const { SessionModel } = require('../connect/db');
 const useMongoDBAuthState = require('../connect/mongoAuthState');
 const DeviceModel = require('../connect/DeviceModel');
-const ChatModel = require('../connect/ChatModel');
+const ChatGroupModel = require('../connect/ChatGroupModel');
 
 // Map untuk menyimpan sesi aktif dan counter percobaan koneksi
 const sessions = new Map();
@@ -184,7 +184,7 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
                     console.log(`📩 [GRUP] Pesan masuk dari ${senderJid} di grup ${groupJid}: ${textMessage}`);
 
                     // Simpan ke database MongoDB (menggunakan upsert / pengecekan unik agar tidak duplikat)
-                    await ChatModel.findOneAndUpdate(
+                    await ChatGroupModel.findOneAndUpdate(
                         { messageId: messageId },
                         {
                             phoneNumber: phoneNumber,
@@ -193,7 +193,7 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
                             message: textMessage,
                             timestamp: new Date(timestamp * 1000)
                         },
-                        { upsert: true, new: true }
+                        { upsert: true, returnDocument: 'after' }
                     );
                 }
             } else {
