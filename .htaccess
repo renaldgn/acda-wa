@@ -1,0 +1,31 @@
+# 1. Mencegah Directory Listing (OWASP: Security Misconfiguration)
+Options -Indexes
+
+# 2. Blokir akses ke file sensitif (.env, package.json, git, log, dll)
+<FilesMatch "^\.|\.(env|json|lock|log|md|gitignore)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# 3. Paksa Penggunaan HTTPS (OWASP: Transport Layer Protection)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# 4. Tambahkan Standard Security Headers (OWASP Top 10)
+<IfModule mod_headers.c>
+    # Mencegah Clickjacking (Situs Anda tidak bisa dibingkai di iframe luar)
+    Header set X-Frame-Options "SAMEORIGIN"
+    
+    # Mencegah MIME-type sniffing
+    Header set X-Content-Type-Options "nosniff"
+    
+    # Proteksi XSS bawaan browser
+    Header set X-XSS-Protection "1; mode=block"
+    
+    # Mengontrol Referrer Policy
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
