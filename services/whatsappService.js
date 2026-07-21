@@ -5,6 +5,7 @@ const pino = require('pino');
 const { SessionModel } = require('../connect/db');
 const useMongoDBAuthState = require('../connect/mongoAuthState');
 const DeviceModel = require('../connect/DeviceModel');
+const ChatModel = require('../connect/ChatModel');
 
 // Map untuk menyimpan sesi aktif dan counter percobaan koneksi
 const sessions = new Map();
@@ -161,16 +162,53 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
     });
 
     sock.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-        const sender = msg.key.remoteJid;
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+        try {
+            const msg = m.messages[0];
+            if (!msg.message || msg.key.fromMe) return;
 
-        if (text?.toLowerCase() === 'ping') {
-            await sock.sendPresenceUpdate('composing', sender);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            await sock.sendMessage(sender, { text: 'Pong! 🤖' });
-            await sock.sendPresenceUpdate('paused', sender);
+            const remoteJid = msg.key.remoteJid; // JID tujuan atau grup
+
+            // Cek apakah pesan berasal dari GRUP (berakhiran @g.us)
+            if (remoteJid && remoteJid.endsWith('@g.us')) {
+                const groupJid = remoteJid;
+                const senderJid = msg.key.participant; // Anggota pengirim di grup
+                const messageId = msg.key.id;
+                const timestamp = msg.messageTimestamp;
+
+                // Ambil teks pesan
+                const textMessage = msg.message.conversation ||
+                    msg.message.extendedTextMessage?.text ||
+                    msg.message.imageMessage?.caption || '';
+
+                if (textMessage.includes('#TASK DAILY#')) {
+                    console.log(`📩 [GRUP] Pesan masuk dari ${senderJid} di grup ${groupJid}: ${textMessage}`);
+
+                    // Simpan ke database MongoDB (menggunakan upsert / pengecekan unik agar tidak duplikat)
+                    await ChatModel.findOneAndUpdate(
+                        { messageId: messageId },
+                        {
+                            phoneNumber: phoneNumber,
+                            groupJid: groupJid,
+                            senderJid: senderJid,
+                            message: textMessage,
+                            timestamp: new Date(timestamp * 1000)
+                        },
+                        { upsert: true, new: true }
+                    );
+                }
+            } else {
+                const sender = msg.key.remoteJid;
+                const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+
+                if (text?.toLowerCase() === 'ping') {
+                    await sock.sendPresenceUpdate('composing', sender);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await sock.sendMessage(sender, { text: 'Pong! 🤖' });
+                    await sock.sendPresenceUpdate('paused', sender);
+                }
+            }
+        } catch (dbErr) {
+            console.error('❌ Gagal menyimpan chat grup ke database:', dbErr);
         }
     });
 
