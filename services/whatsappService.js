@@ -17,7 +17,7 @@ const setSocketIO = (socketIoInstance) => {
     io = socketIoInstance;
 };
 
-// --- FUNGSI UNTUK MEMULIHKAN SESI ---
+// --- FUNGSI UNTUK MEMULIHKAN SESI (Diperpanjang jedanya agar aman dari 440) ---
 async function initSessions() {
     try {
         const activeDevices = await DeviceModel.find({ status: 'Terhubung' });
@@ -27,12 +27,24 @@ async function initSessions() {
             return;
         }
 
-        console.log(`🔄 Memulihkan ${activeDevices.length} sesi aktif...`);
+        console.log(`🔄 Memulihkan ${activeDevices.length} sesi aktif ke dalam memori...`);
 
         for (const device of activeDevices) {
+            const sessionKey = device.phoneNumber;
+
+            if (sessions.has(sessionKey)) {
+                console.log(`⚠️ Sesi ${sessionKey} sudah aktif di memori. Melewati pemulihan.`);
+                continue;
+            }
+
+            console.log(`🔌 Menghubungkan kembali sesi: ${sessionKey}`);
             connectToWhatsApp(device.phoneNumber, device.userId);
-            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // PERBAIKAN: Ubah jeda antar perangkat menjadi 6 detik untuk menghindari Rate Limit & Error 440
+            await new Promise(resolve => setTimeout(resolve, 6000));
         }
+
+        console.log('✅ Proses pemulihan semua sesi selesai.');
     } catch (error) {
         console.error('❌ Gagal memulihkan sesi:', error);
     }
@@ -127,10 +139,13 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
                 return;
             }
 
+            // Penanganan Khusus Error 440 (Conflict) atau Error Jaringan Lainnya
             if (statusCode === 503 || statusCode === 440 || statusCode === 408) {
                 const attempts = (connectionAttempts.get(phoneNumber) || 0) + 1;
                 connectionAttempts.set(phoneNumber, attempts);
-                const delay = Math.min(attempts * 10000, 60000);
+
+                // Beri jeda lebih panjang untuk error 440 agar socket lama bersih total
+                const delay = statusCode === 440 ? Math.max(attempts * 15000, 30000) : Math.min(attempts * 10000, 60000);
 
                 console.log(`🔄 Error ${statusCode}. Reconnect ${phoneNumber} dalam ${delay / 1000} detik...`);
                 if (io) io.emit('status', { phoneNumber, status: `Menunggu jaringan (${delay / 1000}s)...` });
@@ -158,6 +173,8 @@ async function connectToWhatsApp(phoneNumber, userId = null) {
             await sock.sendPresenceUpdate('paused', sender);
         }
     });
+
+    return sock;
 }
 
 module.exports = {

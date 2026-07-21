@@ -134,6 +134,52 @@ function createApiRoutes(sessions, connectToWhatsApp) {
         }
     });
 
+    // 5. Endpoint untuk ambil semua grup
+    // 5. Endpoint untuk ambil semua grup
+    router.get('/groups', async (req, res) => {
+        try {
+            const { userId } = req.query; // Parameter dari frontend (bisa berupa phoneNumber atau userId)
+
+            if (!userId) {
+                return res.status(400).json({ success: false, message: 'Parameter perangkat tidak boleh kosong.' });
+            }
+
+            // 1. Cek langsung di Map berdasarkan key (misal parameter yang dikirim adalah phoneNumber)
+            let sock = sessions.get(userId);
+
+            // 2. Jika tidak ketemu langsung di Map, kemungkinan `userId` yang dikirim adalah ID Database / User ID. 
+            // Mari kita cari data Device di MongoDB berdasarkan userId atau phoneNumber.
+            if (!sock) {
+                const device = await DeviceModel.findOne({
+                    $or: [{ userId: userId }, { phoneNumber: userId }]
+                });
+
+                if (device) {
+                    // Cek kembali menggunakan nomor telepon dari data database yang ditemukan
+                    sock = sessions.get(device.phoneNumber);
+                }
+            }
+
+            // Jika setelah dicari tetap tidak ada socket yang aktif di memori
+            if (!sock) {
+                return res.status(404).json({
+                    success: false,
+                    message: `Sesi untuk perangkat '${userId}' tidak ditemukan di memori server atau belum terhubung.`
+                });
+            }
+
+            // Ambil daftar grup menggunakan fungsi bawaan Baileys
+            const fetchedGroups = await sock.groupFetchAllParticipating();
+            const groupsArray = Object.values(fetchedGroups);
+
+            res.json({ success: true, groups: groupsArray });
+
+        } catch (error) {
+            console.error('❌ Gagal mengambil data grup:', error);
+            res.status(500).json({ success: false, message: 'Gagal mengambil data grup dari WhatsApp.' });
+        }
+    });
+
     return router;
 }
 
